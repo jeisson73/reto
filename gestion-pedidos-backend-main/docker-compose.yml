@@ -1,0 +1,93 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: gestion_pedidos_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: gestion_pedidos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+
+  api_gateway:
+    build: ./api-gateway
+    container_name: api_gateway
+    ports:
+      - "8080:8080"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ORDER_SERVICE_URL: http://order-service:8083
+      JWT_SECRET: gestion-pedidos-demo-secret-2026-123456
+    depends_on:
+      - auth_service
+      - catalog_service
+      - order_service
+
+  auth_service:
+    build: ./auth-service
+    container_name: auth_service
+    hostname: auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      JWT_SECRET: gestion-pedidos-demo-secret-2026-123456
+    depends_on:
+      - postgres
+    networks:
+      default:
+        aliases:
+          - auth-service
+
+  catalog_service:
+    build: ./catalog-service
+    container_name: catalog_service
+    hostname: catalog-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+    networks:
+      default:
+        aliases:
+          - catalog-service
+
+  order_service:
+    build: ./order-service
+    container_name: order_service
+    hostname: order-service
+    ports:
+      - "8083:8083"
+    environment:
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      ORDER_REQUEST_TIMEOUT_MS: 3000
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: admin
+      RABBITMQ_PASSWORD: admin
+      ORDER_EVENTS_QUEUE: orders.events
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      default:
+        aliases:
+          - order-service
+
+
+volumes:
+  postgres_data:
